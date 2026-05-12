@@ -7,6 +7,9 @@ final class ExerciseClassifier {
     private var mean: [Float] = []
     private var scale: [Float] = []
 
+    private let expectedFrames = 48
+    private let expectedFeatures = 300
+
     init?() {
         guard let modelPath = Bundle.main.path(
             forResource: "exercise_mediapipe_classifier_quant",
@@ -41,8 +44,14 @@ final class ExerciseClassifier {
 
             let scalerData = try Data(contentsOf: URL(fileURLWithPath: scalerPath))
             let scaler = try JSONDecoder().decode(ScalerData.self, from: scalerData)
+
             mean = scaler.mean
             scale = scaler.scale
+
+            print("Classifier loaded")
+            print("Labels:", labels.count)
+            print("Scaler mean:", mean.count)
+            print("Scaler scale:", scale.count)
 
         } catch {
             print("ExerciseClassifier init error:", error)
@@ -51,19 +60,43 @@ final class ExerciseClassifier {
     }
 
     func predict(sequence: [[Float]]) -> String? {
-        guard sequence.count == 32 else { return nil }
+        print("Classifier sequence count:", sequence.count)
+
+        guard sequence.count == expectedFrames else {
+            print("Wrong sequence length:", sequence.count)
+            return nil
+        }
+
+        guard let first = sequence.first else {
+            print("Sequence empty")
+            return nil
+        }
+
+        print("Classifier feature count:", first.count)
+
+        guard first.count == expectedFeatures else {
+            print("Wrong feature count:", first.count)
+            return nil
+        }
+
+        guard mean.count == expectedFeatures, scale.count == expectedFeatures else {
+            print("Scaler shape mismatch. mean:", mean.count, "scale:", scale.count)
+            return nil
+        }
 
         var flat: [Float] = []
+        flat.reserveCapacity(expectedFrames * expectedFeatures)
 
         for frame in sequence {
-            guard frame.count == 144 else {
-                print("Frame feature count wrong:", frame.count)
+            guard frame.count == expectedFeatures else {
+                print("Bad frame feature count:", frame.count)
                 return nil
             }
 
-            for i in 0..<frame.count {
+            for i in 0..<expectedFeatures {
                 let denom = scale[i] == 0 ? 1.0 : scale[i]
-                flat.append((frame[i] - mean[i]) / denom)
+                let scaledValue = (frame[i] - mean[i]) / denom
+                flat.append(scaledValue)
             }
         }
 
@@ -77,8 +110,11 @@ final class ExerciseClassifier {
             guard let maxIndex = probs.indices.max(by: { probs[$0] < probs[$1] }),
                   maxIndex < labels.count
             else {
+                print("Could not find max prediction")
                 return nil
             }
+
+            print("Predicted:", labels[maxIndex], "confidence:", probs[maxIndex])
 
             return labels[maxIndex]
 

@@ -1,5 +1,9 @@
 import Foundation
 
+struct LandmarkVelocityFrame {
+    static var previous: [Float]? = nil
+}
+
 enum MPIndex {
     static let leftShoulder = 11
     static let rightShoulder = 12
@@ -13,11 +17,32 @@ enum MPIndex {
     static let rightKnee = 26
     static let leftAnkle = 27
     static let rightAnkle = 28
+    static let leftFoot = 31
+    static let rightFoot = 32
 }
 
 final class FeatureExtractor {
 
-    static func angle(_ a: MPPoseLandmark, _ b: MPPoseLandmark, _ c: MPPoseLandmark) -> Float {
+    // ============================================================
+    // Distance
+    // ============================================================
+    static func distance(_ a: MPPoseLandmark,
+                         _ b: MPPoseLandmark) -> Float {
+
+        return sqrt(
+            pow(a.x - b.x, 2) +
+            pow(a.y - b.y, 2) +
+            pow(a.z - b.z, 2)
+        )
+    }
+
+    // ============================================================
+    // Angle
+    // ============================================================
+    static func angle(_ a: MPPoseLandmark,
+                      _ b: MPPoseLandmark,
+                      _ c: MPPoseLandmark) -> Float {
+
         let baX = a.x - b.x
         let baY = a.y - b.y
         let baZ = a.z - b.z
@@ -36,14 +61,23 @@ final class FeatureExtractor {
         }
 
         let cosine = max(-1, min(1, dot / (normBA * normBC)))
+
         return acos(cosine) * 180 / Float.pi
     }
 
+    // ============================================================
+    // Main feature extraction
+    // Output: 300 features
+    // ============================================================
     static func landmarksToFeatures(_ lms: [MPPoseLandmark]) -> [Float] {
-        guard lms.count >= 33 else { return [] }
+
+        guard lms.count >= 33 else {
+            return []
+        }
 
         let leftHip = lms[MPIndex.leftHip]
         let rightHip = lms[MPIndex.rightHip]
+
         let leftShoulder = lms[MPIndex.leftShoulder]
         let rightShoulder = lms[MPIndex.rightShoulder]
 
@@ -65,86 +99,258 @@ final class FeatureExtractor {
             torsoSize = 1.0
         }
 
+        // ============================================================
+        // 1. Landmark features
+        // 33 * 4 = 132
+        // ============================================================
+
         var features: [Float] = []
 
         for lm in lms.prefix(33) {
-            features.append((lm.x - hipCenterX) / torsoSize)
-            features.append((lm.y - hipCenterY) / torsoSize)
-            features.append((lm.z - hipCenterZ) / torsoSize)
+
+            let nx = (lm.x - hipCenterX) / torsoSize
+            let ny = (lm.y - hipCenterY) / torsoSize
+            let nz = (lm.z - hipCenterZ) / torsoSize
+
+            features.append(nx)
+            features.append(ny)
+            features.append(nz)
             features.append(lm.visibility)
         }
 
-        let leftElbow = angle(lms[MPIndex.leftShoulder], lms[MPIndex.leftElbow], lms[MPIndex.leftWrist])
-        let rightElbow = angle(lms[MPIndex.rightShoulder], lms[MPIndex.rightElbow], lms[MPIndex.rightWrist])
+        // ============================================================
+        // 2. Angle features
+        // ============================================================
 
-        let leftShoulderAngle = angle(lms[MPIndex.leftElbow], lms[MPIndex.leftShoulder], lms[MPIndex.leftHip])
-        let rightShoulderAngle = angle(lms[MPIndex.rightElbow], lms[MPIndex.rightShoulder], lms[MPIndex.rightHip])
+        let leftElbow = angle(
+            lms[MPIndex.leftShoulder],
+            lms[MPIndex.leftElbow],
+            lms[MPIndex.leftWrist]
+        )
 
-        let leftKnee = angle(lms[MPIndex.leftHip], lms[MPIndex.leftKnee], lms[MPIndex.leftAnkle])
-        let rightKnee = angle(lms[MPIndex.rightHip], lms[MPIndex.rightKnee], lms[MPIndex.rightAnkle])
+        let rightElbow = angle(
+            lms[MPIndex.rightShoulder],
+            lms[MPIndex.rightElbow],
+            lms[MPIndex.rightWrist]
+        )
 
-        let leftHipAngle = angle(lms[MPIndex.leftShoulder], lms[MPIndex.leftHip], lms[MPIndex.leftKnee])
-        let rightHipAngle = angle(lms[MPIndex.rightShoulder], lms[MPIndex.rightHip], lms[MPIndex.rightKnee])
+        let leftShoulderAngle = angle(
+            lms[MPIndex.leftElbow],
+            lms[MPIndex.leftShoulder],
+            lms[MPIndex.leftHip]
+        )
+
+        let rightShoulderAngle = angle(
+            lms[MPIndex.rightElbow],
+            lms[MPIndex.rightShoulder],
+            lms[MPIndex.rightHip]
+        )
+
+        let leftKnee = angle(
+            lms[MPIndex.leftHip],
+            lms[MPIndex.leftKnee],
+            lms[MPIndex.leftAnkle]
+        )
+
+        let rightKnee = angle(
+            lms[MPIndex.rightHip],
+            lms[MPIndex.rightKnee],
+            lms[MPIndex.rightAnkle]
+        )
+
+        let leftHipAngle = angle(
+            lms[MPIndex.leftShoulder],
+            lms[MPIndex.leftHip],
+            lms[MPIndex.leftKnee]
+        )
+
+        let rightHipAngle = angle(
+            lms[MPIndex.rightShoulder],
+            lms[MPIndex.rightHip],
+            lms[MPIndex.rightKnee]
+        )
+
+        let leftAnkle = angle(
+            lms[MPIndex.leftKnee],
+            lms[MPIndex.leftAnkle],
+            lms[MPIndex.leftFoot]
+        )
+
+        let rightAnkle = angle(
+            lms[MPIndex.rightKnee],
+            lms[MPIndex.rightAnkle],
+            lms[MPIndex.rightFoot]
+        )
 
         let torsoVecX = shoulderCenterX - hipCenterX
         let torsoVecY = shoulderCenterY - hipCenterY
-        let verticalX: Float = 0
-        let verticalY: Float = -1
 
         let denom = sqrt(torsoVecX * torsoVecX + torsoVecY * torsoVecY)
 
         var torsoAngle: Float = 0
+
         if denom > 0 {
-            let cosine = max(-1, min(1, (torsoVecX * verticalX + torsoVecY * verticalY) / denom))
+            let cosine = max(-1, min(1, (-torsoVecY) / denom))
             torsoAngle = acos(cosine) * 180 / Float.pi
         }
 
+        let angleFeatures: [Float] = [
+            leftElbow / 180,
+            rightElbow / 180,
+            leftShoulderAngle / 180,
+            rightShoulderAngle / 180,
+            leftKnee / 180,
+            rightKnee / 180,
+            leftHipAngle / 180,
+            rightHipAngle / 180,
+            leftAnkle / 180,
+            rightAnkle / 180,
+            torsoAngle / 180
+        ]
+
+        features.append(contentsOf: angleFeatures)
+
+        // ============================================================
+        // 3. Geometry features
+        // ============================================================
+
         let shoulderWidth = distance(leftShoulder, rightShoulder)
         let hipWidth = distance(leftHip, rightHip)
+
         let bodyHeight = sqrt(
             pow(shoulderCenterX - hipCenterX, 2) +
             pow(shoulderCenterY - hipCenterY, 2) +
             pow(shoulderCenterZ - hipCenterZ, 2)
         )
 
-        features.append(leftElbow / 180)
-        features.append(rightElbow / 180)
-        features.append(leftShoulderAngle / 180)
-        features.append(rightShoulderAngle / 180)
-        features.append(leftKnee / 180)
-        features.append(rightKnee / 180)
-        features.append(leftHipAngle / 180)
-        features.append(rightHipAngle / 180)
-        features.append(torsoAngle / 180)
-        features.append(shoulderWidth)
-        features.append(hipWidth)
-        features.append(bodyHeight)
+        let wristYMean =
+            (lms[MPIndex.leftWrist].y +
+             lms[MPIndex.rightWrist].y) / 2
+
+        let shoulderYMean =
+            (lms[MPIndex.leftShoulder].y +
+             lms[MPIndex.rightShoulder].y) / 2
+
+        let hipYMean =
+            (lms[MPIndex.leftHip].y +
+             lms[MPIndex.rightHip].y) / 2
+
+        let kneeYMean =
+            (lms[MPIndex.leftKnee].y +
+             lms[MPIndex.rightKnee].y) / 2
+
+        let wristVsShoulder = wristYMean - shoulderYMean
+        let wristVsHip = wristYMean - hipYMean
+        let kneeVsHip = kneeYMean - hipYMean
+
+        let wristDistance =
+            abs(lms[MPIndex.leftWrist].x -
+                lms[MPIndex.rightWrist].x)
+
+        let geometryFeatures: [Float] = [
+            shoulderWidth,
+            hipWidth,
+            bodyHeight,
+            wristVsShoulder,
+            wristVsHip,
+            kneeVsHip,
+            wristDistance
+        ]
+
+        features.append(contentsOf: geometryFeatures)
+
+        // ============================================================
+        // Base feature count should now be 150
+        // ============================================================
+
+        while features.count < 150 {
+            features.append(0)
+        }
+
+        // ============================================================
+        // 4. Velocity features
+        // ============================================================
+
+        let currentBase = Array(features.prefix(150))
+
+        var velocityFeatures: [Float] = []
+
+        if let previous = LandmarkVelocityFrame.previous {
+
+            for i in 0..<150 {
+                velocityFeatures.append(currentBase[i] - previous[i])
+            }
+
+        } else {
+
+            velocityFeatures = Array(repeating: 0, count: 150)
+        }
+
+        LandmarkVelocityFrame.previous = currentBase
+
+        features.append(contentsOf: velocityFeatures)
+
+        // ============================================================
+        // Final feature count = 300
+        // ============================================================
+
+        while features.count < 300 {
+            features.append(0)
+        }
+
+        if features.count > 300 {
+            features = Array(features.prefix(300))
+        }
 
         return features
     }
 
-    static func distance(_ a: MPPoseLandmark, _ b: MPPoseLandmark) -> Float {
-        return sqrt(
-            pow(a.x - b.x, 2) +
-            pow(a.y - b.y, 2) +
-            pow(a.z - b.z, 2)
+    // ============================================================
+    // Rep counting angle
+    // ============================================================
+
+    static func countingAngle(landmarks lms: [MPPoseLandmark],
+                              exercise: String) -> Float? {
+
+        guard lms.count >= 33 else {
+            return nil
+        }
+
+        let leftElbow = angle(
+            lms[MPIndex.leftShoulder],
+            lms[MPIndex.leftElbow],
+            lms[MPIndex.leftWrist]
         )
-    }
 
-    static func countingAngle(landmarks lms: [MPPoseLandmark], exercise: String) -> Float? {
-        guard lms.count >= 33 else { return nil }
+        let rightElbow = angle(
+            lms[MPIndex.rightShoulder],
+            lms[MPIndex.rightElbow],
+            lms[MPIndex.rightWrist]
+        )
 
-        let leftElbow = angle(lms[MPIndex.leftShoulder], lms[MPIndex.leftElbow], lms[MPIndex.leftWrist])
-        let rightElbow = angle(lms[MPIndex.rightShoulder], lms[MPIndex.rightElbow], lms[MPIndex.rightWrist])
+        let leftKnee = angle(
+            lms[MPIndex.leftHip],
+            lms[MPIndex.leftKnee],
+            lms[MPIndex.leftAnkle]
+        )
 
-        let leftKnee = angle(lms[MPIndex.leftHip], lms[MPIndex.leftKnee], lms[MPIndex.leftAnkle])
-        let rightKnee = angle(lms[MPIndex.rightHip], lms[MPIndex.rightKnee], lms[MPIndex.rightAnkle])
+        let rightKnee = angle(
+            lms[MPIndex.rightHip],
+            lms[MPIndex.rightKnee],
+            lms[MPIndex.rightAnkle]
+        )
 
-        let leftHip = angle(lms[MPIndex.leftShoulder], lms[MPIndex.leftHip], lms[MPIndex.leftKnee])
-        let rightHip = angle(lms[MPIndex.rightShoulder], lms[MPIndex.rightHip], lms[MPIndex.rightKnee])
+        let leftHipAngle = angle(
+            lms[MPIndex.leftShoulder],
+            lms[MPIndex.leftHip],
+            lms[MPIndex.leftKnee]
+        )
 
-        let leftShoulder = angle(lms[MPIndex.leftElbow], lms[MPIndex.leftShoulder], lms[MPIndex.leftHip])
-        let rightShoulder = angle(lms[MPIndex.rightElbow], lms[MPIndex.rightShoulder], lms[MPIndex.rightHip])
+        let rightHipAngle = angle(
+            lms[MPIndex.rightShoulder],
+            lms[MPIndex.rightHip],
+            lms[MPIndex.rightKnee]
+        )
 
         if [
             "barbell biceps curl",
@@ -160,6 +366,7 @@ final class FeatureExtractor {
             "pull Up",
             "t bar row"
         ].contains(exercise) {
+
             return (leftElbow + rightElbow) / 2
         }
 
@@ -167,12 +374,14 @@ final class FeatureExtractor {
             return (leftKnee + rightKnee) / 2
         }
 
-        if ["deadlift", "romanian deadlift", "hip thrust", "leg raises"].contains(exercise) {
-            return (leftHip + rightHip) / 2
-        }
+        if [
+            "deadlift",
+            "romanian deadlift",
+            "hip thrust",
+            "leg raises"
+        ].contains(exercise) {
 
-        if ["lateral raise", "chest fly machine"].contains(exercise) {
-            return (leftShoulder + rightShoulder) / 2
+            return (leftHipAngle + rightHipAngle) / 2
         }
 
         return nil

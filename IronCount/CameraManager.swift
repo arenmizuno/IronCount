@@ -20,6 +20,9 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
     private var frameCounter = 0
 
+    private let expectedFrames = 48
+    private let expectedFeatures = 300
+
     override init() {
         super.init()
 
@@ -48,8 +51,12 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         session.beginConfiguration()
         session.sessionPreset = .medium
 
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-              let input = try? AVCaptureDeviceInput(device: device)
+        guard let device = AVCaptureDevice.default(
+            .builtInWideAngleCamera,
+            for: .video,
+            position: .back
+        ),
+        let input = try? AVCaptureDeviceInput(device: device)
         else {
             DispatchQueue.main.async {
                 self.exerciseLabel = "No camera device"
@@ -71,7 +78,10 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         output.videoSettings = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
         ]
-        output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera.queue"))
+        output.setSampleBufferDelegate(
+            self,
+            queue: DispatchQueue(label: "camera.queue")
+        )
 
         if session.canAddOutput(output) {
             session.addOutput(output)
@@ -133,14 +143,13 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 }
 
 extension CameraManager: MediaPipePoseManagerDelegate {
-    func mediaPipePoseManager(_ manager: MediaPipePoseManager, didOutput landmarks: [MPPoseLandmark]) {
-        DispatchQueue.main.async {
-            self.exerciseLabel = "Pose detected"
-        }
+
+    func mediaPipePoseManager(_ manager: MediaPipePoseManager,
+                              didOutput landmarks: [MPPoseLandmark]) {
 
         let features = FeatureExtractor.landmarksToFeatures(landmarks)
 
-        guard features.count == 144 else {
+        guard features.count == expectedFeatures else {
             DispatchQueue.main.async {
                 self.exerciseLabel = "Wrong features: \(features.count)"
             }
@@ -149,13 +158,13 @@ extension CameraManager: MediaPipePoseManagerDelegate {
 
         sequence.append(features)
 
-        if sequence.count > 32 {
+        if sequence.count > expectedFrames {
             sequence.removeFirst()
         }
 
-        if sequence.count < 32 {
+        if sequence.count < expectedFrames {
             DispatchQueue.main.async {
-                self.exerciseLabel = "Collecting: \(self.sequence.count)/32"
+                self.exerciseLabel = "Collecting: \(self.sequence.count)/\(self.expectedFrames)"
             }
             return
         }
@@ -177,7 +186,10 @@ extension CameraManager: MediaPipePoseManagerDelegate {
         }
 
         if let exercise = lockedExercise,
-           let angle = FeatureExtractor.countingAngle(landmarks: landmarks, exercise: exercise),
+           let angle = FeatureExtractor.countingAngle(
+                landmarks: landmarks,
+                exercise: exercise
+           ),
            let counter = repCounter {
 
             let currentReps = counter.update(angle: angle)
@@ -193,7 +205,8 @@ extension CameraManager: MediaPipePoseManagerDelegate {
         }
     }
 
-    func mediaPipePoseManagerDidFail(_ manager: MediaPipePoseManager, error: Error?) {
+    func mediaPipePoseManagerDidFail(_ manager: MediaPipePoseManager,
+                                     error: Error?) {
         DispatchQueue.main.async {
             if let error = error {
                 self.exerciseLabel = "Pose error: \(error.localizedDescription)"
