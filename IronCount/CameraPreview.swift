@@ -1,26 +1,25 @@
-//
-//  CameraPreview.swift
-//  IronCount
-//
-//  Created by Aren Mizuno on 5/4/26.
-//
 import SwiftUI
 import AVFoundation
 
 struct CameraPreview: UIViewRepresentable {
+
     let session: AVCaptureSession
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
+
         view.videoPreviewLayer.session = session
         view.videoPreviewLayer.videoGravity = .resizeAspectFill
+
         return view
     }
 
-    func updateUIView(_ uiView: PreviewView, context: Context) {}
+    func updateUIView(_ uiView: PreviewView, context: Context) {
+    }
 }
 
 final class PreviewView: UIView {
+
     override class var layerClass: AnyClass {
         AVCaptureVideoPreviewLayer.self
     }
