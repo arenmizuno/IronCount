@@ -12,6 +12,9 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     @Published var reps = 0
     @Published var exerciseRepMemory: [String: Int] = [:]
     @Published var isWorkoutActive = false
+    @Published var elapsedSeconds = 0
+    @Published var pendingWorkout: WorkoutRecord?
+    @Published var savedWorkouts: [WorkoutRecord] = []
 
     private var poseManager: MediaPipePoseManager?
     private let classifier = ExerciseClassifier()
@@ -21,7 +24,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private var repCounter: RepCounter?
 
     private var frameCounter = 0
-    private var savedWorkouts: [[String: Int]] = []
+    private var timer: Timer?
 
     private var recentPredictions: [String] = []
     private let smoothingWindow = 7
@@ -30,9 +33,12 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private let expectedFrames = 48
     private let expectedFeatures = 300
 
+    private let storageKey = "saved_workouts"
+
     override init() {
         super.init()
         poseManager = MediaPipePoseManager(delegate: self)
+        loadSavedWorkouts()
 
         if poseManager == nil {
             exerciseLabel = "MediaPipe failed to load"
@@ -54,9 +60,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             return
         }
 
-        if session.canAddInput(input) {
-            session.addInput(input)
-        }
+        if session.canAddInput(input) { session.addInput(input) }
 
         let output = AVCaptureVideoDataOutput()
         output.alwaysDiscardsLateVideoFrames = true
@@ -65,9 +69,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         ]
         output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera.queue"))
 
-        if session.canAddOutput(output) {
-            session.addOutput(output)
-        }
+        if session.canAddOutput(output) { session.addOutput(output) }
 
         if let connection = output.connection(with: .video) {
             connection.videoOrientation = .portrait
@@ -87,6 +89,15 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         recentPredictions.removeAll()
         exerciseRepMemory.removeAll()
         LandmarkVelocityFrame.previous = nil
+        pendingWorkout = nil
+        elapsedSeconds = 0
+
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            DispatchQueue.main.async {
+                self.elapsedSeconds += 1
+            }
+        }
 
         DispatchQueue.main.async {
             self.reps = 0
@@ -97,8 +108,15 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
     func endWorkout() {
         saveCurrentExerciseReps()
+        timer?.invalidate()
+        timer = nil
 
-        savedWorkouts.append(exerciseRepMemory)
+        let workout = WorkoutRecord(
+            id: UUID(),
+            date: Date(),
+            durationSeconds: elapsedSeconds,
+            repsByExercise: exerciseRepMemory
+        )
 
         sequence.removeAll()
         lockedExercise = nil
@@ -108,20 +126,51 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
         DispatchQueue.main.async {
             self.isWorkoutActive = false
-            self.exerciseLabel = "Workout saved"
+            self.pendingWorkout = workout
+            self.exerciseLabel = "Save or delete workout?"
             self.reps = 0
         }
+    }
 
-        print("Saved workout:", exerciseRepMemory)
+    func savePendingWorkout() {
+        guard let workout = pendingWorkout else { return }
+
+        savedWorkouts.insert(workout, at: 0)
+        saveWorkoutsToStorage()
+        pendingWorkout = nil
+
+        DispatchQueue.main.async {
+            self.exerciseLabel = "Workout saved"
+        }
+    }
+
+    func deletePendingWorkout() {
+        pendingWorkout = nil
+        exerciseRepMemory.removeAll()
+        elapsedSeconds = 0
+
+        DispatchQueue.main.async {
+            self.exerciseLabel = "Workout deleted"
+        }
+    }
+    
+    func deleteSavedWorkoutById(_ id: UUID) {
+        savedWorkouts.removeAll { $0.id == id }
+        saveWorkoutsToStorage()
     }
 
     func reset() {
+        timer?.invalidate()
+        timer = nil
+
         sequence.removeAll()
         lockedExercise = nil
         repCounter = nil
         recentPredictions.removeAll()
         exerciseRepMemory.removeAll()
         LandmarkVelocityFrame.previous = nil
+        pendingWorkout = nil
+        elapsedSeconds = 0
 
         DispatchQueue.main.async {
             self.exerciseLabel = "Reset"
@@ -137,14 +186,11 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     }
 
     private func switchToExercise(_ newExercise: String) {
-        if newExercise == lockedExercise {
-            return
-        }
+        if newExercise == lockedExercise { return }
 
         saveCurrentExerciseReps()
 
         lockedExercise = newExercise
-
         let savedReps = exerciseRepMemory[newExercise] ?? 0
 
         repCounter = RepCounter(exercise: newExercise)
@@ -156,12 +202,31 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         }
     }
 
+    private func saveWorkoutsToStorage() {
+        if let data = try? JSONEncoder().encode(savedWorkouts) {
+            UserDefaults.standard.set(data, forKey: storageKey)
+        }
+    }
+
+    private func loadSavedWorkouts() {
+        guard let data = UserDefaults.standard.data(forKey: storageKey),
+              let workouts = try? JSONDecoder().decode([WorkoutRecord].self, from: data)
+        else { return }
+
+        savedWorkouts = workouts
+    }
+
+    func formattedTime(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let secs = seconds % 60
+        return String(format: "%02d:%02d", minutes, secs)
+    }
+
     func captureOutput(_ output: AVCaptureOutput,
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
 
         frameCounter += 1
-
         guard frameCounter % 3 == 0 else { return }
 
         let timestampMs = Int(Date().timeIntervalSince1970 * 1000)
@@ -192,9 +257,7 @@ extension CameraManager: MediaPipePoseManagerDelegate {
 
         sequence.append(features)
 
-        if sequence.count > expectedFrames {
-            sequence.removeFirst()
-        }
+        if sequence.count > expectedFrames { sequence.removeFirst() }
 
         if sequence.count < expectedFrames {
             DispatchQueue.main.async {
@@ -213,13 +276,9 @@ extension CameraManager: MediaPipePoseManagerDelegate {
             let voteCounts = Dictionary(grouping: recentPredictions, by: { $0 })
                 .mapValues { $0.count }
 
-            if let bestVote = voteCounts.max(by: { $0.value < $1.value }) {
-                let bestExercise = bestVote.key
-                let votes = bestVote.value
-
-                if votes >= minVotesToSwitch {
-                    switchToExercise(bestExercise)
-                }
+            if let bestVote = voteCounts.max(by: { $0.value < $1.value }),
+               bestVote.value >= minVotesToSwitch {
+                switchToExercise(bestVote.key)
             }
         } else {
             DispatchQueue.main.async {
@@ -252,11 +311,7 @@ extension CameraManager: MediaPipePoseManagerDelegate {
         guard isWorkoutActive else { return }
 
         DispatchQueue.main.async {
-            if let error = error {
-                self.exerciseLabel = "Pose error: \(error.localizedDescription)"
-            } else {
-                self.exerciseLabel = "No pose detected"
-            }
+            self.exerciseLabel = error == nil ? "No pose detected" : "Pose error"
         }
     }
 }
