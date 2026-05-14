@@ -8,8 +8,10 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
     let session = AVCaptureSession()
 
-    @Published var exerciseLabel = "Starting..."
+    @Published var exerciseLabel = "Ready"
     @Published var reps = 0
+    @Published var exerciseRepMemory: [String: Int] = [:]
+    @Published var isWorkoutActive = false
 
     private var poseManager: MediaPipePoseManager?
     private let classifier = ExerciseClassifier()
@@ -19,58 +21,41 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private var repCounter: RepCounter?
 
     private var frameCounter = 0
+    private var savedWorkouts: [[String: Int]] = []
+
+    private var recentPredictions: [String] = []
+    private let smoothingWindow = 7
+    private let minVotesToSwitch = 4
 
     private let expectedFrames = 48
     private let expectedFeatures = 300
 
     override init() {
         super.init()
-
         poseManager = MediaPipePoseManager(delegate: self)
 
         if poseManager == nil {
-            DispatchQueue.main.async {
-                self.exerciseLabel = "MediaPipe failed to load"
-            }
+            exerciseLabel = "MediaPipe failed to load"
         } else if classifier == nil {
-            DispatchQueue.main.async {
-                self.exerciseLabel = "Classifier failed to load"
-            }
+            exerciseLabel = "Classifier failed to load"
         } else {
-            DispatchQueue.main.async {
-                self.exerciseLabel = "Ready"
-            }
+            exerciseLabel = "Ready"
         }
     }
 
     func start() {
-        DispatchQueue.main.async {
-            self.exerciseLabel = "Starting camera..."
-        }
-
         session.beginConfiguration()
         session.sessionPreset = .medium
 
-        guard let device = AVCaptureDevice.default(
-            .builtInWideAngleCamera,
-            for: .video,
-            position: .back
-        ),
-        let input = try? AVCaptureDeviceInput(device: device)
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+              let input = try? AVCaptureDeviceInput(device: device)
         else {
-            DispatchQueue.main.async {
-                self.exerciseLabel = "No camera device"
-            }
+            DispatchQueue.main.async { self.exerciseLabel = "No camera device" }
             return
         }
 
         if session.canAddInput(input) {
             session.addInput(input)
-        } else {
-            DispatchQueue.main.async {
-                self.exerciseLabel = "Cannot add camera input"
-            }
-            return
         }
 
         let output = AVCaptureVideoDataOutput()
@@ -78,18 +63,10 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         output.videoSettings = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
         ]
-        output.setSampleBufferDelegate(
-            self,
-            queue: DispatchQueue(label: "camera.queue")
-        )
+        output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera.queue"))
 
         if session.canAddOutput(output) {
             session.addOutput(output)
-        } else {
-            DispatchQueue.main.async {
-                self.exerciseLabel = "Cannot add video output"
-            }
-            return
         }
 
         if let connection = output.connection(with: .video) {
@@ -100,10 +77,82 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
         DispatchQueue.global(qos: .userInitiated).async {
             self.session.startRunning()
+        }
+    }
 
-            DispatchQueue.main.async {
-                self.exerciseLabel = "Camera running"
-            }
+    func startWorkout() {
+        sequence.removeAll()
+        lockedExercise = nil
+        repCounter = nil
+        recentPredictions.removeAll()
+        exerciseRepMemory.removeAll()
+        LandmarkVelocityFrame.previous = nil
+
+        DispatchQueue.main.async {
+            self.reps = 0
+            self.isWorkoutActive = true
+            self.exerciseLabel = "Workout started"
+        }
+    }
+
+    func endWorkout() {
+        saveCurrentExerciseReps()
+
+        savedWorkouts.append(exerciseRepMemory)
+
+        sequence.removeAll()
+        lockedExercise = nil
+        repCounter = nil
+        recentPredictions.removeAll()
+        LandmarkVelocityFrame.previous = nil
+
+        DispatchQueue.main.async {
+            self.isWorkoutActive = false
+            self.exerciseLabel = "Workout saved"
+            self.reps = 0
+        }
+
+        print("Saved workout:", exerciseRepMemory)
+    }
+
+    func reset() {
+        sequence.removeAll()
+        lockedExercise = nil
+        repCounter = nil
+        recentPredictions.removeAll()
+        exerciseRepMemory.removeAll()
+        LandmarkVelocityFrame.previous = nil
+
+        DispatchQueue.main.async {
+            self.exerciseLabel = "Reset"
+            self.reps = 0
+            self.isWorkoutActive = false
+        }
+    }
+
+    private func saveCurrentExerciseReps() {
+        if let exercise = lockedExercise {
+            exerciseRepMemory[exercise] = reps
+        }
+    }
+
+    private func switchToExercise(_ newExercise: String) {
+        if newExercise == lockedExercise {
+            return
+        }
+
+        saveCurrentExerciseReps()
+
+        lockedExercise = newExercise
+
+        let savedReps = exerciseRepMemory[newExercise] ?? 0
+
+        repCounter = RepCounter(exercise: newExercise)
+        repCounter?.count = savedReps
+
+        DispatchQueue.main.async {
+            self.reps = savedReps
+            self.exerciseLabel = newExercise
         }
     }
 
@@ -112,12 +161,6 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
                        from connection: AVCaptureConnection) {
 
         frameCounter += 1
-
-        if frameCounter % 30 == 0 {
-            DispatchQueue.main.async {
-                self.exerciseLabel = "Frames received: \(self.frameCounter)"
-            }
-        }
 
         guard frameCounter % 3 == 0 else { return }
 
@@ -129,23 +172,14 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             timestampMs: timestampMs
         )
     }
-
-    func reset() {
-        sequence.removeAll()
-        lockedExercise = nil
-        repCounter = nil
-
-        DispatchQueue.main.async {
-            self.exerciseLabel = "Reset"
-            self.reps = 0
-        }
-    }
 }
 
 extension CameraManager: MediaPipePoseManagerDelegate {
 
     func mediaPipePoseManager(_ manager: MediaPipePoseManager,
                               didOutput landmarks: [MPPoseLandmark]) {
+
+        guard isWorkoutActive else { return }
 
         let features = FeatureExtractor.landmarksToFeatures(landmarks)
 
@@ -169,44 +203,54 @@ extension CameraManager: MediaPipePoseManagerDelegate {
             return
         }
 
-        if lockedExercise == nil {
-            if let predictedExercise = classifier?.predict(sequence: sequence) {
-                lockedExercise = predictedExercise
-                repCounter = RepCounter(exercise: predictedExercise)
+        if let prediction = classifier?.predict(sequence: sequence) {
+            recentPredictions.append(prediction)
 
-                DispatchQueue.main.async {
-                    self.exerciseLabel = predictedExercise
-                }
-            } else {
-                DispatchQueue.main.async {
-                    self.exerciseLabel = "Classifier returned nil"
-                }
-                return
+            if recentPredictions.count > smoothingWindow {
+                recentPredictions.removeFirst()
             }
-        }
 
-        if let exercise = lockedExercise,
-           let angle = FeatureExtractor.countingAngle(
-                landmarks: landmarks,
-                exercise: exercise
-           ),
-           let counter = repCounter {
+            let voteCounts = Dictionary(grouping: recentPredictions, by: { $0 })
+                .mapValues { $0.count }
 
-            let currentReps = counter.update(angle: angle)
+            if let bestVote = voteCounts.max(by: { $0.value < $1.value }) {
+                let bestExercise = bestVote.key
+                let votes = bestVote.value
 
-            DispatchQueue.main.async {
-                self.exerciseLabel = "\(exercise) angle: \(Int(angle))"
-                self.reps = currentReps
+                if votes >= minVotesToSwitch {
+                    switchToExercise(bestExercise)
+                }
             }
         } else {
             DispatchQueue.main.async {
-                self.exerciseLabel = "No count angle"
+                self.exerciseLabel = "Classifier returned nil"
             }
+            return
+        }
+
+        guard let exercise = lockedExercise,
+              let angle = FeatureExtractor.countingAngle(landmarks: landmarks, exercise: exercise),
+              let counter = repCounter
+        else {
+            DispatchQueue.main.async {
+                self.exerciseLabel = "Classifying..."
+            }
+            return
+        }
+
+        let currentReps = counter.update(angle: angle)
+        exerciseRepMemory[exercise] = currentReps
+
+        DispatchQueue.main.async {
+            self.reps = currentReps
+            self.exerciseLabel = "\(exercise) angle: \(Int(angle))"
         }
     }
 
     func mediaPipePoseManagerDidFail(_ manager: MediaPipePoseManager,
                                      error: Error?) {
+        guard isWorkoutActive else { return }
+
         DispatchQueue.main.async {
             if let error = error {
                 self.exerciseLabel = "Pose error: \(error.localizedDescription)"

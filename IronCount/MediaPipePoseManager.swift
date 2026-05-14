@@ -36,14 +36,15 @@ final class MediaPipePoseManager: NSObject {
         let options = PoseLandmarkerOptions()
         options.runningMode = .liveStream
         options.numPoses = 1
-        options.minPoseDetectionConfidence = 0.5
-        options.minPosePresenceConfidence = 0.5
-        options.minTrackingConfidence = 0.5
+        options.minPoseDetectionConfidence = 0.3
+        options.minPosePresenceConfidence = 0.3
+        options.minTrackingConfidence = 0.3
         options.baseOptions.modelAssetPath = modelPath
         options.poseLandmarkerLiveStreamDelegate = self
 
         do {
             poseLandmarker = try PoseLandmarker(options: options)
+            print("MediaPipe PoseLandmarker loaded")
         } catch {
             print("Failed to create PoseLandmarker:", error)
             return nil
@@ -54,12 +55,16 @@ final class MediaPipePoseManager: NSObject {
                      orientation: UIImage.Orientation,
                      timestampMs: Int) {
         do {
-            let mpImage = try MPImage(sampleBuffer: sampleBuffer, orientation: orientation)
+            let mpImage = try MPImage(
+                sampleBuffer: sampleBuffer,
+                orientation: orientation
+            )
 
             try poseLandmarker?.detectAsync(
                 image: mpImage,
                 timestampInMilliseconds: timestampMs
             )
+
         } catch {
             delegate?.mediaPipePoseManagerDidFail(self, error: error)
         }
@@ -67,6 +72,7 @@ final class MediaPipePoseManager: NSObject {
 }
 
 extension MediaPipePoseManager: PoseLandmarkerLiveStreamDelegate {
+
     func poseLandmarker(_ poseLandmarker: PoseLandmarker,
                         didFinishDetection result: PoseLandmarkerResult?,
                         timestampInMilliseconds: Int,

@@ -2,7 +2,7 @@ import Foundation
 
 final class RepCounter {
     private var state = "start"
-    private(set) var count = 0
+    var count = 0
     private let exercise: String
 
     init(exercise: String) {
