@@ -1,8 +1,20 @@
 import Foundation
-import TensorFlowLite
+import CoreML
+
+struct ExercisePrediction {
+    let label: String
+    let confidence: Float
+    let margin: Float
+}
+
+struct ScalerData: Codable {
+    let mean: [Float]
+    let scale: [Float]
+}
 
 final class ExerciseClassifier {
-    private var interpreter: Interpreter
+
+    private var model: MLModel?
     private var labels: [String] = []
     private var mean: [Float] = []
     private var scale: [Float] = []
@@ -11,47 +23,56 @@ final class ExerciseClassifier {
     private let expectedFeatures = 300
 
     init?() {
-        guard let modelPath = Bundle.main.path(
-            forResource: "exercise_mediapipe_classifier_quant",
-            ofType: "tflite"
-        ) else {
-            print("exercise_mediapipe_classifier_quant.tflite not found")
-            return nil
-        }
-
-        guard let labelPath = Bundle.main.path(
-            forResource: "label_names",
-            ofType: "json"
-        ) else {
-            print("label_names.json not found")
-            return nil
-        }
-
-        guard let scalerPath = Bundle.main.path(
-            forResource: "mediapipe_scaler",
-            ofType: "json"
-        ) else {
-            print("mediapipe_scaler.json not found")
-            return nil
-        }
-
         do {
-            interpreter = try Interpreter(modelPath: modelPath)
-            try interpreter.allocateTensors()
+            let config = MLModelConfiguration()
+
+            if let compiledURL = Bundle.main.url(
+                forResource: "WorkoutClassifierLSTM",
+                withExtension: "mlmodelc"
+            ) {
+                self.model = try MLModel(contentsOf: compiledURL, configuration: config)
+                print("Loaded compiled CoreML model")
+            } else if let packageURL = Bundle.main.url(
+                forResource: "WorkoutClassifierLSTM",
+                withExtension: "mlpackage"
+            ) {
+                let compiledURL = try MLModel.compileModel(at: packageURL)
+                self.model = try MLModel(contentsOf: compiledURL, configuration: config)
+                print("Loaded mlpackage CoreML model")
+            } else {
+                print("WorkoutClassifierLSTM model not found")
+                return nil
+            }
+
+            guard let labelPath = Bundle.main.path(
+                forResource: "label_names",
+                ofType: "json"
+            ) else {
+                print("label_names.json not found")
+                return nil
+            }
 
             let labelData = try Data(contentsOf: URL(fileURLWithPath: labelPath))
-            labels = try JSONDecoder().decode([String].self, from: labelData)
+            self.labels = try JSONDecoder().decode([String].self, from: labelData)
+
+            guard let scalerPath = Bundle.main.path(
+                forResource: "mediapipe_scaler",
+                ofType: "json"
+            ) else {
+                print("mediapipe_scaler.json not found")
+                return nil
+            }
 
             let scalerData = try Data(contentsOf: URL(fileURLWithPath: scalerPath))
             let scaler = try JSONDecoder().decode(ScalerData.self, from: scalerData)
 
-            mean = scaler.mean
-            scale = scaler.scale
+            self.mean = scaler.mean
+            self.scale = scaler.scale
 
-            print("Classifier loaded")
+            print("CoreML LSTM classifier loaded")
             print("Labels:", labels.count)
-            print("Scaler mean:", mean.count)
-            print("Scaler scale:", scale.count)
+            print("Mean count:", mean.count)
+            print("Scale count:", scale.count)
 
         } catch {
             print("ExerciseClassifier init error:", error)
@@ -59,89 +80,127 @@ final class ExerciseClassifier {
         }
     }
 
-    func predict(sequence: [[Float]]) -> String? {
-        print("Classifier sequence count:", sequence.count)
+    func predict(sequence: [[Float]]) -> ExercisePrediction? {
+        guard let model = model else {
+            print("CoreML model not loaded")
+            return nil
+        }
 
         guard sequence.count == expectedFrames else {
             print("Wrong sequence length:", sequence.count)
             return nil
         }
 
-        guard let first = sequence.first else {
-            print("Sequence empty")
+        guard let first = sequence.first,
+              first.count == expectedFeatures else {
+            print("Wrong feature count:", sequence.first?.count ?? -1)
             return nil
         }
 
-        print("Classifier feature count:", first.count)
-
-        guard first.count == expectedFeatures else {
-            print("Wrong feature count:", first.count)
+        guard mean.count == expectedFeatures,
+              scale.count == expectedFeatures else {
+            print("Scaler mismatch")
             return nil
-        }
-
-        guard mean.count == expectedFeatures, scale.count == expectedFeatures else {
-            print("Scaler shape mismatch. mean:", mean.count, "scale:", scale.count)
-            return nil
-        }
-
-        var flat: [Float] = []
-        flat.reserveCapacity(expectedFrames * expectedFeatures)
-
-        for frame in sequence {
-            guard frame.count == expectedFeatures else {
-                print("Bad frame feature count:", frame.count)
-                return nil
-            }
-
-            for i in 0..<expectedFeatures {
-                let denom = scale[i] == 0 ? 1.0 : scale[i]
-                let scaledValue = (frame[i] - mean[i]) / denom
-                flat.append(scaledValue)
-            }
         }
 
         do {
-            try interpreter.copy(flat.toData(), toInputAt: 0)
-            try interpreter.invoke()
+            let inputArray = try MLMultiArray(
+                shape: [
+                    NSNumber(value: 1),
+                    NSNumber(value: expectedFrames),
+                    NSNumber(value: expectedFeatures)
+                ],
+                dataType: .float32
+            )
 
-            let output = try interpreter.output(at: 0)
-            let probs: [Float] = output.data.toArray(type: Float.self)
+            var flatIndex = 0
 
-            guard let maxIndex = probs.indices.max(by: { probs[$0] < probs[$1] }),
-                  maxIndex < labels.count
-            else {
-                print("Could not find max prediction")
+            for t in 0..<expectedFrames {
+                let frame = sequence[t]
+
+                guard frame.count == expectedFeatures else {
+                    print("Bad frame feature count:", frame.count)
+                    return nil
+                }
+
+                for f in 0..<expectedFeatures {
+                    let denom = scale[f] == 0 ? 1.0 : scale[f]
+                    let scaled = (frame[f] - mean[f]) / denom
+
+                    inputArray[flatIndex] = NSNumber(value: scaled)
+                    flatIndex += 1
+                }
+            }
+
+            let inputProvider = try MLDictionaryFeatureProvider(dictionary: [
+                "input": MLFeatureValue(multiArray: inputArray)
+            ])
+
+            let output = try model.prediction(from: inputProvider)
+
+            guard let logitsArray = output.featureValue(for: "logits")?.multiArrayValue else {
+                print("Could not find logits output")
+                print("Available outputs:", output.featureNames)
                 return nil
             }
 
-            print("Predicted:", labels[maxIndex], "confidence:", probs[maxIndex])
+            let logits = multiArrayToFloatArray(logitsArray)
+            let probs = softmax(logits)
 
-            return labels[maxIndex]
+            let sortedIndices = probs.indices.sorted { probs[$0] > probs[$1] }
+
+            guard sortedIndices.count >= 2 else {
+                return nil
+            }
+
+            let top1 = sortedIndices[0]
+            let top2 = sortedIndices[1]
+
+            guard top1 < labels.count else {
+                return nil
+            }
+
+            let label = labels[top1]
+            let confidence = probs[top1]
+            let margin = probs[top1] - probs[top2]
+
+            print("Prediction:", label, "confidence:", confidence, "margin:", margin)
+
+            return ExercisePrediction(
+                label: label,
+                confidence: confidence,
+                margin: margin
+            )
 
         } catch {
-            print("Classifier prediction error:", error)
+            print("CoreML prediction error:", error)
             return nil
         }
     }
-}
 
-struct ScalerData: Codable {
-    let mean: [Float]
-    let scale: [Float]
-}
+    private func multiArrayToFloatArray(_ array: MLMultiArray) -> [Float] {
+        var values: [Float] = []
+        values.reserveCapacity(array.count)
 
-extension Array where Element == Float {
-    func toData() -> Data {
-        var copy = self
-        return Data(bytes: &copy, count: copy.count * MemoryLayout<Float>.stride)
-    }
-}
-
-extension Data {
-    func toArray<T>(type: T.Type) -> [T] {
-        return self.withUnsafeBytes { rawBufferPointer in
-            let buffer = rawBufferPointer.bindMemory(to: T.self)
-            return Array(buffer)
+        for i in 0..<array.count {
+            values.append(array[i].floatValue)
         }
+
+        return values
+    }
+
+    private func softmax(_ logits: [Float]) -> [Float] {
+        guard let maxLogit = logits.max() else {
+            return logits
+        }
+
+        let expValues = logits.map { exp($0 - maxLogit) }
+        let sumExp = expValues.reduce(0, +)
+
+        guard sumExp != 0 else {
+            return logits
+        }
+
+        return expValues.map { $0 / sumExp }
     }
 }
