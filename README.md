@@ -141,15 +141,6 @@ IronCount/
 │   ├── torch_cnn_lstm_coreml/
 │   └── torch_tcn_coreml/
 │   └── preprocessed/
-│       ├── X_verified_mediapipe.npy
-│       ├── X_test_mediapipe.npy
-│       ├── y_verified.npy
-│       ├── y_test.npy
-│       ├── kept_verified_mediapipe_dataset.csv
-│       ├── kept_test_mediapipe_dataset.csv
-│       ├── feature_metadata.json
-│       ├── label_names.json
-│       └── mediapipe_scaler.json
 │
 ├── graphs/
 │   └── eda/
