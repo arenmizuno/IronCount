@@ -241,3 +241,21 @@ Potential future work includes:
 - and transformer-based temporal architectures.
 
 ---
+
+## Notes
+
+Large preprocessed `.npy` feature files were not uploaded to GitHub because they exceeded GitHub's file size limits.
+
+Examples include:
+- `X_verified_mediapipe.npy`
+- `X_test_mediapipe.npy`
+
+These files can be regenerated using:
+
+```text
+src/mediapipe_landmark_extractor.ipynb
+```
+
+All preprocessing scripts, metadata files, label mappings, and feature extraction pipelines are included in this repository.
+
+---
