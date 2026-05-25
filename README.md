@@ -136,14 +136,10 @@ IronCount/
 │
 ├── data/
 │   ├── eda/
-│   │   ├── all_train_test_metadata.csv
-│   │   ├── train_metadata.csv
-│   │   ├── test_metadata.csv
-│   │   ├── train_exercise_stats.csv
-│   │   ├── test_exercise_stats.csv
-│   │   ├── class_imbalance_summary.csv
-│   │   └── exercise_split_counts.csv
-│   │
+│   ├── torch_cnn_coreml/
+│   ├── torch_lstm_coreml/
+│   ├── torch_cnn_lstm_coreml/
+│   └── torch_tcn_coreml/
 │   └── preprocessed/
 │       ├── X_verified_mediapipe.npy
 │       ├── X_test_mediapipe.npy
@@ -157,14 +153,10 @@ IronCount/
 │
 ├── graphs/
 │   └── eda/
-│       ├── train_videos_by_exercise.png
-│       ├── test_videos_by_exercise.png
-│       ├── train_duration_distribution.png
-│       ├── test_duration_distribution.png
-│       ├── train_fps_distribution.png
-│       ├── test_fps_distribution.png
-│       ├── train_resolution_distribution.png
-│       └── test_resolution_distribution.png
+│   ├── torch_cnn_coreml/
+│   ├── torch_lstm_coreml/
+│   ├── torch_cnn_lstm_coreml/
+│   └── torch_tcn_coreml/
 │
 ├── models/
 │   ├── torch_cnn_coreml/
@@ -172,29 +164,29 @@ IronCount/
 │   ├── torch_cnn_lstm_coreml/
 │   └── torch_tcn_coreml/
 │
-├── notebooks/
+├── src/
 │   ├── eda.ipynb
 │   ├── mediapipe_landmark_extractor.ipynb
-│   ├── torch_cnn_coreml_mediapipe.ipynb
-│   ├── torch_lstm_coreml_mediapipe.ipynb
-│   ├── torch_cnn_lstm_coreml_mediapipe.ipynb
-│   └── torch_tcn_coreml_mediapipe.ipynb
+│   └── models/
+│       ├── torch_cnn_coreml_mediapipe.ipynb
+│       ├── torch_lstm_coreml_mediapipe.ipynb
+│       ├── torch_cnn_lstm_coreml_mediapipe.ipynb
+│       └── torch_tcn_coreml_mediapipe.ipynb
 │
 └── IronCount/
     │
     ├── IronCountApp.swift
     ├── ContentView.swift
     ├── CameraManager.swift
+    ├── CameraPreview.swift
     ├── ExerciseClassifier.swift
+    ├── FeatureExtractor.swift
+    ├── MediaPipePoseManager.swift
     ├── RepCounter.swift
-    ├── PoseFeatureExtractor.swift
+    ├── WorkoutRecord.swift
     ├── WorkoutClassifierLSTM.mlpackage
     ├── label_names.json
-    ├── mediapipe_scaler.json
-    │
-    ├── Assets.xcassets/
-    │
-    └── Preview Content/
+    └──  mediapipe_scaler.json
 ```
 
 ---
