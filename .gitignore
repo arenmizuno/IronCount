@@ -5,3 +5,4 @@ DerivedData/
 Pods/
 DerivedData/
 Podfile.lock
+data/preprocessed/*.npy
