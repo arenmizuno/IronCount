@@ -45,49 +45,81 @@ The system is designed for efficient on-device inference using CoreML and Swift,
 
 ---
 
-# Dataset
-
-Dataset used:
-
-```text
-philosopher0808/gym-workoutexercises-video
-```
-
-The dataset contains:
-- verified/preprocessed exercise clips,
-- crawled YouTube workout videos,
-- noisy real-world test videos.
-
-## Dataset Summary
-
-| Split | Videos |
-|---|---|
-| Train | 1,571 |
-| Test | 61 |
-| Exercises | 22 |
-
-Exercises include:
-- squat
-- push-up
-- deadlift
-- bench press
-- shoulder press
-- pull up
-- leg raises
-- and more.
-
----
-
 # Pipeline Overview
 
 ## 1. Exploratory Data Analysis (EDA)
 
+EDA and preprocessing were performed in:
+
+```text
+src/eda.ipynb
+```
+
+### Dataset Source
+
+```text
+Kaggle: philosopher0808/gym-workoutexercises-video
+```
+
+### Dataset Overview
+
+- No corrupted videos detected
+- 22 exercise classes used (plank removed)
+- Separate train and noisy real-world test splits
+
+### Train / Verified Split
+
+- 1,571 videos
+- Cleaned and segmented exercise clips (10–13 seconds max)
+- 817 videos from the original Workout/Exercises Video dataset (Hasyim Abdillah)
+- 754 videos crawled from YouTube
+
+### Test Split
+
+- 61 noisy real-world videos
+- Includes longer durations, varied resolutions, and more realistic recording conditions
+
+### EDA Tasks Performed
+
 - Video metadata extraction
 - FPS analysis
 - Resolution analysis
-- Duration distributions
+- Duration distribution analysis
+- Exercise frequency analysis
 - Class imbalance analysis
 - Train/test split validation
+- Filename overlap validation
+- Corrupted video detection
+
+### Key Findings
+
+- Most training videos were standardized around:
+  - ~10 second durations
+  - 25–30 FPS
+  - 720p and 1080p resolutions
+
+- The noisy test set showed:
+  - larger variation in duration
+  - more diverse resolutions
+  - less standardized recording conditions
+
+- Class imbalance was moderate but manageable across the 22 exercise categories.
+
+### Generated Outputs
+
+EDA outputs are automatically saved to:
+
+```text
+data/eda/
+graphs/eda/
+```
+
+Including:
+- metadata CSV files
+- exercise statistics
+- class imbalance summaries
+- duration/FPS/resolution graphs
+- train/test visualizations
 
 ## 2. Pose Extraction
 
