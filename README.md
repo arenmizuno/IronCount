@@ -194,10 +194,8 @@ This transformed frame-level pose data into temporal motion sequences suitable f
 ### Final Feature Representation
 
 Each frame contained:
-- 150 engineered pose features
-
-After velocity augmentation:
-- 300 features per frame
+- 150 base pose features
+- 150 velocity features
 
 Final sequence shape:
 
