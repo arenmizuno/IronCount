@@ -17,8 +17,7 @@ struct HistoryView: View {
                         Text("Duration: \(formattedTime(workout.durationSeconds))")
                             .foregroundColor(.secondary)
 
-                        ForEach(workout.repsByExercise.keys.sorted(), id: \.
-self) { exercise in
+                        ForEach(workout.repsByExercise.keys.sorted(), id: \.self) { exercise in
                             Text("\(exercise): \(workout.repsByExercise[exercise] ?? 0) reps")
                                 .font(.subheadline)
                         }
