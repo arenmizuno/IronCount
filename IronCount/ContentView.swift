@@ -24,6 +24,34 @@ struct ContentView: View {
                     .font(.title2)
                     .foregroundColor(.green)
 
+                // ── ADDED: counter mode toggle ──────────────────────
+                // Disabled while a workout is active to avoid mid-set
+                // state corruption (the active counter would be replaced).
+                Button {
+                    camera.usePCACounter.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: camera.usePCACounter
+                              ? "waveform.path.ecg"
+                              : "angle")
+                        Text(camera.usePCACounter
+                             ? "Counter: PCA"
+                             : "Counter: Angle")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(camera.usePCACounter
+                                ? Color.purple.opacity(0.75)
+                                : Color.orange.opacity(0.75))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+                .disabled(camera.isWorkoutActive)
+                .opacity(camera.isWorkoutActive ? 0.4 : 1.0)
+                // ── END ADDED ───────────────────────────────────────
+
                 DisclosureGroup("Exercise Summary", isExpanded: $showExerciseSummary) {
                     VStack(alignment: .leading, spacing: 8) {
                         if camera.exerciseRepMemory.isEmpty {
