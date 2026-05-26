@@ -121,18 +121,115 @@ Including:
 - duration/FPS/resolution graphs
 - train/test visualizations
 
-## 2. Pose Extraction
+## 2. Pose Extraction & Feature Engineering
+
+Pose extraction and preprocessing were performed in:
+
+```text
+src/mediapipe_landmark_extractor.ipynb
+```
+
+### MediaPipe Pose Extraction
 
 MediaPipe Pose was used to extract:
-- 33 body landmarks
-- visibility scores
-- normalized pose coordinates
+- 33 body landmarks per frame
+- x, y, z coordinates
+- landmark visibility scores
 
-Additional engineered features:
-- joint angles
-- body geometry features
-- velocity features
-- temporal sequences
+Landmarks were normalized relative to:
+- hip center position
+- torso/body scale
+
+to improve robustness across:
+- different camera distances
+- body sizes
+- resolutions
+- recording environments
+
+### Engineered Features
+
+Additional pose-engineered features were generated for each frame:
+
+#### Joint Angle Features
+Angles were computed for:
+- elbows
+- shoulders
+- hips
+- knees
+- ankles
+- torso orientation
+
+#### Geometry Features
+Additional body geometry features included:
+- shoulder width
+- hip width
+- wrist distance
+- relative wrist/body positions
+- body height estimates
+
+#### Velocity Features
+Temporal motion information was added using:
+- frame-to-frame feature differences
+- movement velocity encoding
+
+This helped capture:
+- exercise motion dynamics
+- exercise tempo
+- directional movement patterns
+
+### Temporal Sequence Construction
+
+Videos were converted into overlapping temporal sequences using sliding windows.
+
+Configuration:
+- 48 frames per sequence
+- 50% overlap between windows
+- short videos padded when necessary
+
+This transformed frame-level pose data into temporal motion sequences suitable for:
+- LSTM models
+- CNN-LSTM hybrids
+- TCN architectures
+
+### Final Feature Representation
+
+Each frame contained:
+- 150 engineered pose features
+
+After velocity augmentation:
+- 300 features per frame
+
+Final sequence shape:
+
+```text
+(sequence_length, feature_dim)
+(48, 300)
+```
+
+### Generated Outputs
+
+The preprocessing pipeline generated:
+- train/test `.npy` sequence tensors
+- label arrays
+- metadata CSV files
+- scaler configurations
+- label mappings
+
+Outputs are saved to:
+
+```text
+data/preprocessed/
+```
+
+### Notes
+
+Large preprocessed `.npy` files were not uploaded to GitHub because they exceeded GitHub's file size limits.
+
+These files can be regenerated using:
+
+```text
+src/mediapipe_landmark_extractor.ipynb
+```
 
 ## 3. Sequence Generation
 
