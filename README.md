@@ -31,17 +31,23 @@ The system is designed for efficient on-device inference using CoreML and Swift,
 
 ---
 
-# Features
+# Business Problem & Project Goal
 
-- Real-time exercise classification
-- MediaPipe pose landmark extraction
-- Temporal sequence modeling
-- Rep-counting support
-- iOS CoreML deployment
-- Multiple deep learning architectures
-- Train/test evaluation pipeline
-- EDA and preprocessing notebooks
-- Support for noisy real-world test videos
+Users often lose track of repetitions during workouts, especially during high-intensity or high-volume training sessions. Additionally, many current fitness applications lack accurate real-time visual analysis and instead rely on:
+- manual repetition input,
+- wearable sensors,
+- or limited motion tracking systems.
+
+As a result, gym users need intelligent systems capable of:
+- automated exercise recognition,
+- real-time repetition counting,
+- and motion-aware workout monitoring using only a mobile camera.
+
+To address this problem, Iron Count was developed as an AI-based fitness assistant that uses computer vision, pose estimation, and deep learning to:
+- classify exercises in real time,
+- track workout repetitions,
+- analyze pose-based movement patterns,
+- and support intelligent workout monitoring directly from a mobile device.
 
 ---
 
@@ -228,6 +234,7 @@ These files can be regenerated using:
 ```text
 src/mediapipe_landmark_extractor.ipynb
 ```
+
 ## 3. Model Training
 
 Multiple deep learning architectures were explored for exercise classification using MediaPipe pose sequences.  
@@ -579,24 +586,6 @@ IronCount/
 
 ---
 
-## Notes
-
-Large preprocessed `.npy` feature files were not uploaded to GitHub because they exceeded GitHub's file size limits.
-
-Examples include:
-- `X_verified_mediapipe.npy`
-- `X_test_mediapipe.npy`
-
-These files can be regenerated using:
-
-```text
-src/mediapipe_landmark_extractor.ipynb
-```
-
-All preprocessing scripts, metadata files, label mappings, and feature extraction pipelines are included in this repository.
-
----
-
 # Technologies Used
 
 ## Computer Vision
@@ -617,23 +606,6 @@ All preprocessing scripts, metadata files, label mappings, and feature extractio
 - Swift
 - CoreML
 - Xcode
-
----
-
-# Model Deployment
-
-The final models were exported as:
-- `.mlpackage`
-- `.json` label mappings
-- scaler configuration files
-
-and integrated into an iOS application for real-time inference.
-
----
-
-# Results
-
-EDIT
 
 ---
 
