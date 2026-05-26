@@ -6,3 +6,5 @@ Pods/
 DerivedData/
 Podfile.lock
 data/preprocessed/*.npy
+.DS_Store
+**/.DS_Store

@@ -16,12 +16,18 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     @Published var pendingWorkout: WorkoutRecord?
     @Published var savedWorkouts: [WorkoutRecord] = []
 
+    // ── CHANGED: PCA toggle (false = original angle-based RepCounter) ──
+    @Published var usePCACounter = true
+
     private var poseManager: MediaPipePoseManager?
     private let classifier = ExerciseClassifier()
 
     private var sequence: [[Float]] = []
     private var lockedExercise: String?
+
+    // ── CHANGED: two counters; only one is non-nil at a time ──
     private var repCounter: RepCounter?
+    private var pcaRepCounter: PCARepCounter?
 
     private var frameCounter = 0
     private var timer: Timer?
@@ -40,6 +46,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
     override init() {
         super.init()
+        
 
         poseManager = MediaPipePoseManager(delegate: self)
         loadSavedWorkouts()
@@ -103,7 +110,11 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     func startWorkout() {
         sequence.removeAll()
         lockedExercise = nil
-        repCounter = nil
+
+        // ── CHANGED: clear both counters ──
+        repCounter    = nil
+        pcaRepCounter = nil
+
         recentPredictions.removeAll()
         exerciseRepMemory.removeAll()
         LandmarkVelocityFrame.previous = nil
@@ -140,7 +151,11 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
         sequence.removeAll()
         lockedExercise = nil
-        repCounter = nil
+
+        // ── CHANGED: clear both counters ──
+        repCounter    = nil
+        pcaRepCounter = nil
+
         recentPredictions.removeAll()
         LandmarkVelocityFrame.previous = nil
 
@@ -187,7 +202,11 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
         sequence.removeAll()
         lockedExercise = nil
-        repCounter = nil
+
+        // ── CHANGED: clear both counters ──
+        repCounter    = nil
+        pcaRepCounter = nil
+
         recentPredictions.removeAll()
         exerciseRepMemory.removeAll()
         LandmarkVelocityFrame.previous = nil
@@ -208,19 +227,30 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         }
     }
 
+    // ── CHANGED: switchToExercise tries PCA first, falls back to angle counter ──
     private func switchToExercise(_ newExercise: String) {
-        if newExercise == lockedExercise {
-            return
-        }
+        if newExercise == lockedExercise { return }
 
         saveCurrentExerciseReps()
-
         lockedExercise = newExercise
-
         let savedReps = exerciseRepMemory[newExercise] ?? 0
 
-        repCounter = RepCounter(exercise: newExercise)
-        repCounter?.count = savedReps
+        if usePCACounter,
+           let pca = try? PCARepCounter(exercise: newExercise) {
+            // PCA profile found for this exercise → use it
+            pcaRepCounter       = pca
+            pcaRepCounter?.count = savedReps
+            repCounter          = nil
+            print("PCARepCounter loaded for: \(newExercise)")
+        } else {
+            // No PCA profile (or toggle off) → fall back to angle-based counter
+            if usePCACounter {
+                print("PCARepCounter: no profile for '\(newExercise)', falling back to RepCounter")
+            }
+            repCounter       = RepCounter(exercise: newExercise)
+            repCounter?.count = savedReps
+            pcaRepCounter    = nil
+        }
 
         DispatchQueue.main.async {
             self.reps = savedReps
@@ -276,9 +306,7 @@ extension CameraManager: MediaPipePoseManagerDelegate {
     func mediaPipePoseManager(_ manager: MediaPipePoseManager,
                               didOutput landmarks: [MPPoseLandmark]) {
 
-        guard isWorkoutActive else {
-            return
-        }
+        guard isWorkoutActive else { return }
 
         let features = FeatureExtractor.landmarksToFeatures(landmarks)
 
@@ -291,9 +319,7 @@ extension CameraManager: MediaPipePoseManagerDelegate {
 
         sequence.append(features)
 
-        if sequence.count > expectedFrames {
-            sequence.removeFirst()
-        }
+        if sequence.count > expectedFrames { sequence.removeFirst() }
 
         if sequence.count < expectedFrames {
             DispatchQueue.main.async {
@@ -314,7 +340,6 @@ extension CameraManager: MediaPipePoseManagerDelegate {
             }
 
             recentPredictions.append(prediction.label)
-
             if recentPredictions.count > smoothingWindow {
                 recentPredictions.removeFirst()
             }
@@ -334,34 +359,40 @@ extension CameraManager: MediaPipePoseManagerDelegate {
             return
         }
 
-        guard let exercise = lockedExercise,
-              let angle = FeatureExtractor.countingAngle(
-                landmarks: landmarks,
-                exercise: exercise
-              ),
-              let counter = repCounter
-        else {
-            DispatchQueue.main.async {
-                self.exerciseLabel = "Classifying..."
-            }
+        // ── CHANGED: rep counting block — PCA or angle, whichever is active ──
+        guard let exercise = lockedExercise else {
+            DispatchQueue.main.async { self.exerciseLabel = "Classifying..." }
             return
         }
 
-        let currentReps = counter.update(angle: angle)
+        if let pcaCounter = pcaRepCounter {
+            // PCA path: feed raw landmarks directly
+            let currentReps = pcaCounter.update(landmarks: landmarks)
+            exerciseRepMemory[exercise] = currentReps
+            DispatchQueue.main.async {
+                self.reps = currentReps
+                self.exerciseLabel = "\(exercise) [PCA]"
+            }
 
-        exerciseRepMemory[exercise] = currentReps
+        } else if let angle = FeatureExtractor.countingAngle(
+                      landmarks: landmarks, exercise: exercise),
+                  let counter = repCounter {
+            // Angle-based path: original RepCounter logic unchanged
+            let currentReps = counter.update(angle: angle)
+            exerciseRepMemory[exercise] = currentReps
+            DispatchQueue.main.async {
+                self.reps = currentReps
+                self.exerciseLabel = "\(exercise) angle: \(Int(angle))"
+            }
 
-        DispatchQueue.main.async {
-            self.reps = currentReps
-            self.exerciseLabel = "\(exercise) angle: \(Int(angle))"
+        } else {
+            DispatchQueue.main.async { self.exerciseLabel = "Classifying..." }
         }
     }
 
     func mediaPipePoseManagerDidFail(_ manager: MediaPipePoseManager,
                                      error: Error?) {
-        guard isWorkoutActive else {
-            return
-        }
+        guard isWorkoutActive else { return }
 
         DispatchQueue.main.async {
             if let error = error {
