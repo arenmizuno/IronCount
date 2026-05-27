@@ -260,240 +260,91 @@ src/torch_tcn_coreml_mediapipe.ipynb
 
 ---
 
-### Training Strategy
+### Architectures Evaluated
+
+| Model | Purpose |
+|---|---|
+| CNN | Lightweight temporal feature extraction with fast mobile inference |
+| LSTM | Sequential motion modeling using bidirectional temporal learning |
+| CNN + LSTM | Combines local motion extraction with temporal sequence modeling |
+| TCN | Efficient temporal modeling with dilated convolutions and residual connections |
+
+---
+
+### Hyperparameter Search
+
+Multiple hyperparameter configurations were evaluated across all architectures using GroupKFold cross-validation.
+
+| Model | Hyperparameters Tested |
+|---|---|
+| CNN | Conv channels: `(96,128,192,256)`, `(64,128,192,256)`, `(96,160,224,288)`, `(128,160,224,320)`; kernels: `(3,5,3,3)`, `(3,5,5,3)`, `(5,5,3,3)`; dropout: `0.30–0.40`; LR: `1e-3`, `5e-4`; weight decay: `1e-5` |
+| LSTM | Hidden size: `128`, `256`; LSTM layers: `1`, `2`; dropout: `0.30–0.40`; LR: `1e-3`, `5e-4`; weight decay: `1e-5`; bidirectional attention-based LSTM |
+| CNN + LSTM | CNN channels: `(96,128,192)`, `(96,160,224)`, `(128,160,224)`; hidden size: `128`, `256`; LSTM layers: `1`, `2`; dropout: `0.30–0.40`; LR: `1e-3`, `5e-4`; weight decay: `1e-5` |
+| TCN | Projection channels: `128`, `160`; TCN channels: `(128,160,192,256)`, `(128,192,224,256)`, `(160,192,224,288)`; dilations: `(1,2,4,8)`; kernel sizes: `3`, `5`; dropout: `0.30–0.40`; LR: `1e-3`, `5e-4`; weight decay: `1e-5` |
+
+---
 
 All models shared a common training pipeline:
 
-- 5-fold GroupKFold cross-validation
-- StandardScaler normalization
-- pose sequence augmentation
-- weighted cross-entropy loss
-- Adam optimization
-- learning rate scheduling
-- gradient clipping
-- early stopping
-
-The training process used:
-- grouping by original video filepath to avoid sequence leakage between train/validation folds
-- ReduceLROnPlateau learning rate scheduling
-- gradient clipping (`max_norm = 1.0`) for training stability
-- early stopping patience of 15 epochs
+- 5-Fold GroupKFold cross-validation grouped by source video
+- Fold-specific StandardScaler normalization
+- Pose-sequence augmentation for stronger generalization
+- Weighted cross-entropy loss for class imbalance
+- Adam optimizer with early stopping and LR scheduling
+- Final retraining using the best CV-selected hyperparameters
 
 ---
 
-### Data Scaling & Augmentation
+### Pose-Sequence Augmentation
 
-Pose features were standardized using `StandardScaler` across the feature dimension.
+Pose-sequence augmentation was applied during training to improve robustness and generalization.
 
-Augmentation techniques included:
+Augmentations included:
 - Gaussian noise injection
-- temporal shifting
-- frame duplication
-- temporal masking
-- feature masking
-
-Each training sequence generated:
-- 2 augmented copies
-
-This increased robustness to:
-- noisy pose extraction
-- varying movement speed
-- inconsistent recording conditions
-- dropped frames
+- Temporal shifting
+- Frame dropout
+- Temporal masking
+- Feature masking
 
 ---
 
-### CNN Model
+### Evaluation Metrics
 
-The CNN-only model focused on extracting local temporal motion patterns using stacked Conv1D layers.
-
-#### Architecture
-
-The CNN architecture included:
-- 4 Conv1D layers
-- Batch Normalization
-- ReLU activations
-- Dropout regularization
-- global average pooling
-- global max pooling
-- fully connected classifier head
-
-#### CNN Depth
-
-| Layer | Channels | Kernel Size |
-|---|---|---|
-| Conv1D | 96 | 3 |
-| Conv1D | 128 | 5 |
-| Conv1D | 192 | 3 |
-| Conv1D | 256 | 3 |
-
-Classifier head:
-- 512 → 256
-- 256 → 128
-- 128 → num_classes
-
-#### CNN Hyperparameters
-
-| Hyperparameter | Value |
-|---|---|
-| Batch Size | 32 |
-| Epochs | 80 |
-| Final Retraining Epochs | 40 |
-| Learning Rate | 1e-3 |
-| Weight Decay | 1e-5 |
-| Dropout | 0.30 |
-
-The CNN model emphasized:
-- short-term motion pattern learning
-- efficient inference
-- lightweight deployment
+Models were evaluated using:
+- Mean cross-validation accuracy
+- Official held-out test accuracy
+- Macro F1-score
+- Weighted F1-score
+- Confusion matrices
+- Per-class classification reports
 
 ---
 
-### LSTM + Attention Model
+### Final Results
 
-The LSTM model focused on learning long-term temporal exercise dynamics.
+| Model | Mean CV Accuracy | Official Test Accuracy |
+|---|---:|---:|
+| CNN | 88.50% | 57.00% |
+| LSTM | 87.31% | 57.70% |
+| CNN + LSTM | 88.22% | 57.70% |
+| TCN | 88.22% | 57.39% |
 
-#### Architecture
-
-The model used:
-- bidirectional LSTM layers
-- Layer Normalization
-- temporal attention mechanism
-- fully connected classifier
-
-#### LSTM Hyperparameters
-
-| Hyperparameter | Value |
-|---|---|
-| Hidden Size | 128 |
-| Number of Layers | 1 |
-| Bidirectional | Yes |
-| Batch Size | 32 |
-| Epochs | 80 |
-| Dropout | 0.30 |
-
-#### Attention Mechanism
-
-An attention layer learned:
-- which frames were most important
-- where exercise-defining motion occurred
-
-This improved:
-- temporal focus
-- robustness to noisy frames
-- sequence interpretability
+The CNN + LSTM architecture achieved the strongest balance between cross-validation performance and real-world test accuracy and was selected for deployment within the iOS application.
 
 ---
 
-### CNN + LSTM + Attention Hybrid Model
+### Deployment
 
-The hybrid CNN-LSTM architecture combined:
-- local spatial-temporal feature extraction
-- long-term temporal modeling
-- attention-based frame weighting
+Final PyTorch models were:
+- exported as CoreML `.mlpackage` models,
+- integrated into the Swift iOS application,
+- and used for real-time on-device workout classification.
 
-#### Architecture Pipeline
-
-```text
-Conv1D Blocks
-→ Bidirectional LSTM
-→ Attention Layer
-→ Fully Connected Classifier
-```
-
-#### CNN Feature Extractor
-
-| Layer | Channels |
-|---|---|
-| Conv1D | 96 |
-| Conv1D | 128 |
-| Conv1D | 192 |
-
-#### LSTM Component
-
-| Parameter | Value |
-|---|---|
-| Hidden Size | 128 |
-| Layers | 1 |
-| Bidirectional | Yes |
-
-#### Classifier Head
-
-```text
-256 → 128 → num_classes
-```
-
-This hybrid model attempted to:
-- capture short-term motion cues with CNNs
-- model exercise flow with LSTMs
-- emphasize important frames using attention
-
----
-
-### Temporal Convolutional Network (TCN)
-
-The TCN model used dilated temporal convolutions and residual connections to model long-range motion dependencies.
-
-#### TCN Architecture
-
-The TCN included:
-- input projection Conv1D
-- residual TCN blocks
-- dilated convolutions
-- BatchNorm
-- dropout
-- residual skip connections
-
-#### Dilated Convolution Blocks
-
-| Block | Channels | Dilation |
-|---|---|---|
-| TCN Block 1 | 128 | 1 |
-| TCN Block 2 | 160 | 2 |
-| TCN Block 3 | 192 | 4 |
-| TCN Block 4 | 256 | 8 |
-
-Increasing dilation allowed the model to:
-- capture larger temporal receptive fields
-- model exercise motion over longer time horizons
-- reduce sequential bottlenecks seen in RNNs
-
-#### TCN Advantages
-
-Compared to LSTMs:
-- more parallelizable
-- faster training
-- stable gradients
-- efficient long-range sequence modeling
-
-The TCN also used:
-- global average pooling
-- global max pooling
-- dense classifier head
-
----
-
-### Optimization & Evaluation
-
-All models used:
-
-| Component | Configuration |
-|---|---|
-| Optimizer | Adam |
-| LR Scheduler | ReduceLROnPlateau |
-| Loss Function | Weighted CrossEntropy |
-| Gradient Clipping | 1.0 |
-| Early Stopping | Patience = 15 |
-| Validation | 5-Fold GroupKFold |
-
-Evaluation metrics included:
-- validation accuracy
-- macro F1-score
-- weighted F1-score
-- classification reports
-
----
+The deployment pipeline included:
+- MediaPipe landmark extraction,
+- feature scaling using saved StandardScaler statistics,
+- real-time sequence buffering,
+- and CoreML inference directly on-device.
 
 ### Final Model Retraining
 
