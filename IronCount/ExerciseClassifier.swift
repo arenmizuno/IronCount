@@ -27,20 +27,20 @@ final class ExerciseClassifier {
             let config = MLModelConfiguration()
 
             if let compiledURL = Bundle.main.url(
-                forResource: "WorkoutClassifierLSTM",
+                forResource: "WorkoutClassifierCNNLSTM",
                 withExtension: "mlmodelc"
             ) {
                 self.model = try MLModel(contentsOf: compiledURL, configuration: config)
                 print("Loaded compiled CoreML model")
             } else if let packageURL = Bundle.main.url(
-                forResource: "WorkoutClassifierLSTM",
+                forResource: "WorkoutClassifierCNNLSTM",
                 withExtension: "mlpackage"
             ) {
                 let compiledURL = try MLModel.compileModel(at: packageURL)
                 self.model = try MLModel(contentsOf: compiledURL, configuration: config)
                 print("Loaded mlpackage CoreML model")
             } else {
-                print("WorkoutClassifierLSTM model not found")
+                print("WorkoutClassifierCNNLSTM model not found")
                 return nil
             }
 
