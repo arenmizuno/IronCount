@@ -330,6 +330,58 @@ Models were evaluated using:
 
 The LSTM architecture achieved the highest official test accuracy and was selected for final deployment within the iOS application. While CNN + LSTM and TCN achieved slightly stronger cross-validation performance, the LSTM model demonstrated the best generalization on the noisy real-world held-out test set while maintaining efficient CoreML deployment compatibility.
 
+## 4. Rep Counting
+
+Rep counting was developed and evaluated in:
+
+```text
+src/RepCounting.ipynb
+```
+
+Two methods were implemented and compared against a manually labeled test set of 61 real-world videos across 21 exercises.
+
+### Method 1 — Angle-Based Counter
+
+An angle-based approach to rep counting.
+
+- Computes a 3D joint angle per frame, averaged across both sides
+- Exercise-to-joint mapping: elbow (curls, push-ups, bench press), knee (squats), hip (deadlifts, hip thrusts), shoulder (lateral raise, chest fly)
+- Per-exercise two-state machine with fixed hardcoded thresholds — no training required
+
+### Method 2 — PCA-Based Counter
+
+A per-exercise unsupervised counter trained on 35 videos per exercise.
+
+**Feature vector (12-dim per frame):**
+- 6 symmetry-averaged joint angles (elbow, shoulder, hip, knee, ankle, torso) — left/right averaged for bilateral exercises
+- 6 body-center-normalized y-coordinates of key landmarks (hips, knees, shoulders)
+
+**Profile fitting:**
+- `StandardScaler` + `PCA` fit on all frames from 35 training videos per exercise
+- Each PC evaluated via FFT periodicity score 
+- PC with median periodicity ≥ 0.12 across training videos selected as the counting axis
+
+**Inference pipeline:**
+- Project each frame's standardized 12-dim vector onto the selected PC → scalar
+- Maintain a 60-frame rolling buffer; apply Savitzky-Golay smoothing to suppress jitter
+- Amplitude guard: skip counting if normalized range < 0.10 (no meaningful motion)
+- Adaptive mean ± 0.8σ Schmitt trigger counts peak → valley → peak cycles as one rep
+
+PCA weights exported per exercise as `metadata.json` + `weights.json` for CoreML integration.
+
+### Evaluation
+
+Both counters share a single MediaPipe inference pass per video. Ground truth rep counts were entered manually for each test video.
+
+**Overall results:**
+
+| Method | n | MAE | RMSE | Bias | Exact % | Within ±1 % |
+|--------|---|-----|------|------|---------|-------------|
+| PCA | 56 | 2.41 | 3.92 | 2.30 | 44.6% | 50.0% |
+| Angle | 54 | 3.94 | 5.85 | −2.17 | 14.8% | 29.6% |
+
+PCA outperforms the angle method on all metrics. 
+
 ### Deployment
 
 Final PyTorch models were:
@@ -396,6 +448,7 @@ IronCount/
 ├── src/
 │   ├── eda.ipynb
 │   ├── mediapipe_landmark_extractor.ipynb
+│   ├── RepCounter.ipynb      
 │   └── models/
 │       ├── torch_cnn_coreml_mediapipe.ipynb
 │       ├── torch_lstm_coreml_mediapipe.ipynb
@@ -404,6 +457,7 @@ IronCount/
 │
 └── IronCount/
     │
+    ├── coreml_bundle
     ├── IronCountApp.swift
     ├── ContentView.swift
     ├── CameraManager.swift
@@ -412,6 +466,7 @@ IronCount/
     ├── FeatureExtractor.swift
     ├── MediaPipePoseManager.swift
     ├── RepCounter.swift
+    ├── PCARepCounter.swift
     ├── WorkoutRecord.swift
     ├── WorkoutClassifierLSTM.mlpackage
     ├── label_names.json
@@ -446,7 +501,7 @@ IronCount/
 # Future Improvements
 
 Potential future work includes:
-- full repetition counting integration,
+- improved repetition counting integration (using more advanced models),
 - exercise form evaluation,
 - multi-person detection,
 - workout tracking analytics,
