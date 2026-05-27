@@ -278,6 +278,16 @@ Multiple hyperparameter configurations were evaluated across all architectures u
 | CNN + LSTM | CNN channels: `(96,128,192)`, `(96,160,224)`, `(128,160,224)`; hidden size: `128`, `256`; LSTM layers: `1`, `2`; dropout: `0.30–0.40`; LR: `1e-3`, `5e-4`; weight decay: `1e-5` |
 | TCN | Projection channels: `128`, `160`; TCN channels: `(128,160,192,256)`, `(128,192,224,256)`, `(160,192,224,288)`; dilations: `(1,2,4,8)`; kernel sizes: `3`, `5`; dropout: `0.30–0.40`; LR: `1e-3`, `5e-4`; weight decay: `1e-5` |
 
+#### Best Hyperparameter Configurations
+
+The highest-performing configuration for each architecture after hyperparameter search was:
+
+| Model | Best Configuration |
+|---|---|
+| CNN | Channels: `(64, 128, 192, 256)`; kernels: `(3, 5, 5, 3)`; dropout: `0.30`; learning rate: `0.001`; weight decay: `1e-5` |
+| CNN + LSTM | CNN channels: `(128, 160, 224)`; hidden size: `256`; LSTM layers: `1`; dropout: `0.35`; learning rate: `0.0005`; weight decay: `1e-5` |
+| TCN | Projection channels: `160`; TCN channels: `(160, 192, 224, 288)`; dilations: `(1, 2, 4, 8)`; kernel size: `3`; dropout: `0.35`; learning rate: `0.0005`; weight decay: `1e-5` |
+
 All models shared a common training pipeline:
 
 - 5-Fold GroupKFold cross-validation grouped by source video
