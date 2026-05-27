@@ -258,8 +258,6 @@ src/torch_cnn_lstm_coreml_mediapipe.ipynb
 src/torch_tcn_coreml_mediapipe.ipynb
 ```
 
----
-
 ### Architectures Evaluated
 
 | Model | Purpose |
@@ -268,8 +266,6 @@ src/torch_tcn_coreml_mediapipe.ipynb
 | LSTM | Sequential motion modeling using bidirectional temporal learning |
 | CNN + LSTM | Combines local motion extraction with temporal sequence modeling |
 | TCN | Efficient temporal modeling with dilated convolutions and residual connections |
-
----
 
 ### Hyperparameter Search
 
@@ -282,8 +278,6 @@ Multiple hyperparameter configurations were evaluated across all architectures u
 | CNN + LSTM | CNN channels: `(96,128,192)`, `(96,160,224)`, `(128,160,224)`; hidden size: `128`, `256`; LSTM layers: `1`, `2`; dropout: `0.30–0.40`; LR: `1e-3`, `5e-4`; weight decay: `1e-5` |
 | TCN | Projection channels: `128`, `160`; TCN channels: `(128,160,192,256)`, `(128,192,224,256)`, `(160,192,224,288)`; dilations: `(1,2,4,8)`; kernel sizes: `3`, `5`; dropout: `0.30–0.40`; LR: `1e-3`, `5e-4`; weight decay: `1e-5` |
 
----
-
 All models shared a common training pipeline:
 
 - 5-Fold GroupKFold cross-validation grouped by source video
@@ -292,8 +286,6 @@ All models shared a common training pipeline:
 - Weighted cross-entropy loss for class imbalance
 - Adam optimizer with early stopping and LR scheduling
 - Final retraining using the best CV-selected hyperparameters
-
----
 
 ### Pose-Sequence Augmentation
 
@@ -306,8 +298,6 @@ Augmentations included:
 - Temporal masking
 - Feature masking
 
----
-
 ### Evaluation Metrics
 
 Models were evaluated using:
@@ -317,8 +307,6 @@ Models were evaluated using:
 - Weighted F1-score
 - Confusion matrices
 - Per-class classification reports
-
----
 
 ### Final Results
 
@@ -330,8 +318,6 @@ Models were evaluated using:
 | TCN | 88.22% | 57.39% |
 
 The CNN + LSTM architecture achieved the strongest balance between cross-validation performance and real-world test accuracy and was selected for deployment within the iOS application.
-
----
 
 ### Deployment
 
@@ -360,8 +346,6 @@ Final outputs included:
 - label mappings
 
 for deployment in the iOS application.
-
----
 
 ### Model Performance
 
