@@ -285,6 +285,7 @@ The highest-performing configuration for each architecture after hyperparameter 
 | Model | Best Configuration |
 |---|---|
 | CNN | Channels: `(64, 128, 192, 256)`; kernels: `(3, 5, 5, 3)`; dropout: `0.30`; learning rate: `0.001`; weight decay: `1e-5` |
+| LSTM | Hidden size: `128`; LSTM layers: `2`; dropout: `0.35`; learning rate: `0.001`; weight decay: `1e-5` |
 | CNN + LSTM | CNN channels: `(128, 160, 224)`; hidden size: `256`; LSTM layers: `1`; dropout: `0.35`; learning rate: `0.0005`; weight decay: `1e-5` |
 | TCN | Projection channels: `160`; TCN channels: `(160, 192, 224, 288)`; dilations: `(1, 2, 4, 8)`; kernel size: `3`; dropout: `0.35`; learning rate: `0.0005`; weight decay: `1e-5` |
 
@@ -323,11 +324,11 @@ Models were evaluated using:
 | Model | Mean CV Accuracy | Official Test Accuracy |
 |---|---:|---:|
 | CNN | 88.50% | 57.00% |
-| LSTM | 87.31% | 57.70% |
+| LSTM | 87.31% | 59.40% |
 | CNN + LSTM | 88.22% | 57.70% |
 | TCN | 88.22% | 57.39% |
 
-The CNN + LSTM architecture achieved the strongest balance between cross-validation performance and real-world test accuracy and was selected for deployment within the iOS application.
+The LSTM architecture achieved the highest official test accuracy and was selected for final deployment within the iOS application. While CNN + LSTM and TCN achieved slightly stronger cross-validation performance, the LSTM model demonstrated the best generalization on the noisy real-world held-out test set while maintaining efficient CoreML deployment compatibility.
 
 ### Deployment
 
@@ -357,18 +358,6 @@ Final outputs included:
 
 for deployment in the iOS application.
 
-### Model Performance
-
-Final models were evaluated on the official noisy test split.
-
-| Model | Test Accuracy | Macro F1 | Weighted F1 |
-|---|---:|---:|---:|
-| CNN | 54.52% | 52.36% | 54.18% |
-| LSTM + Attention | 59.40% | 57.00% | 58.57% |
-| CNN + LSTM + Attention | 57.31% | 55.25% | 57.40% |
-| TCN | 58.70% | 55.85% | 57.64% |
-
-The LSTM + Attention model achieved the strongest overall test performance among the completed model runs, with the highest official test accuracy and macro F1-score.
 
 ## 5. CoreML Deployment
 
