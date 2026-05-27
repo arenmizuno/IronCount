@@ -235,7 +235,7 @@ These files can be regenerated using:
 src/mediapipe_landmark_extractor.ipynb
 ```
 
-## 3. Model Training
+## 3. Classification Model Training
 
 Multiple deep learning architectures were explored for exercise classification using MediaPipe pose sequences.  
 All models were trained using PyTorch on temporal pose representations with shape:
